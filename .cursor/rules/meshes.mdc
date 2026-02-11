@@ -21,7 +21,7 @@ Meshes has four core primitives:
 
 - **Workspace**: A tenant-scoped container. Each workspace has its own connections, rules, event logs, and a publishable key. In multi-tenant apps, create one workspace per customer.
 - **Connection**: A configured destination within a workspace (e.g., a HubSpot OAuth connection, a Salesforce API key, a webhook URL). Connections hold per-tenant credentials, metadata, and action configuration.
-- **Rule**: Binds an event type to a connection. Rules specify which connection receives the event and include a `metadata` object with at minimum an `action` field that determines what the destination does (e.g., `create_or_update_contact`). Rules can be filtered by `event`, `resource`, and `resource_id`.
+- **Rule**: Binds an event type to a connection. Rules specify which connection receives the event and include a `metadata` object with at minimum an `action` field that determines what the destination does (e.g., `add_to_list`). Rules can be filtered by `event`, `resource`, and `resource_id`.
 - **Event**: A JSON payload emitted by your application (e.g., `user.signup`, `payment.failed`, `lead.created`). Events are routed to matching rules within a workspace. Each event tracks delivery status across all matched rules with `rule_events`.
 
 ## API Base URL
@@ -359,7 +359,7 @@ await fetch("https://api.meshes.io/api/v1/rules", {
     connection: "connection-uuid",
     event: "user.signup",
     metadata: {
-      action: "create_or_update_contact", // required — the action the destination performs
+      action: "add_to_list", // required — the action the destination performs
       // Additional action-specific fields:
       // id, name, value, key, data, option, option_value
     },
