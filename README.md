@@ -10,7 +10,7 @@ A drop-in `.mdc` rules file that teaches Cursor, Windsurf, and compatible AI cod
 
 ```bash
 mkdir -p .cursor/rules
-curl -o .cursor/rules/meshes.mdc https://raw.githubusercontent.com/mesheshq/meshes-ai-tools/main/cursor-rules/meshes.mdc
+curl -o .cursor/rules/meshes.mdc https://raw.githubusercontent.com/mesheshq/meshes-ai-tools/refs/heads/main/.cursor/rules/meshes.mdc
 ```
 
 ### [MCP Server](./mcp-server/)
@@ -31,7 +31,7 @@ Copy the rules file into your project and Cursor picks it up automatically:
 
 ```bash
 mkdir -p .cursor/rules
-curl -o .cursor/rules/meshes.mdc https://raw.githubusercontent.com/mesheshq/meshes-ai-tools/main/cursor-rules/meshes.mdc
+curl -o .cursor/rules/meshes.mdc https://raw.githubusercontent.com/mesheshq/meshes-ai-tools/refs/heads/main/.cursor/rules/meshes.mdc
 ```
 
 ### MCP Server
@@ -39,7 +39,7 @@ curl -o .cursor/rules/meshes.mdc https://raw.githubusercontent.com/mesheshq/mesh
 1. Clone and build:
 
 ```bash
-git clone https://github.com/mesheshq/meshes-ai-tools.git
+git clone git@github.com:mesheshq/meshes-ai-tools.git
 cd meshes-ai-tools/mcp-server
 npm install
 npm run build
