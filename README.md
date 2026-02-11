@@ -47,6 +47,8 @@ npm run build
 
 2. Add to your MCP client (e.g., `~/.cursor/mcp.json`):
 
+> **Security note:** This config file contains your secret key. It lives in your home directory (`~/.cursor/mcp.json`), not your project repo, so it won't be accidentally committed. Never commit access keys or secret keys to version control. Publishable keys are safe to commit.
+
 ```json
 {
   "mcpServers": {

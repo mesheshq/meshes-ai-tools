@@ -42,6 +42,8 @@ export MESHES_ORG_ID=your_organization_uuid
 
 ### 3. Add to your MCP client
 
+> **Security note:** These config files contain your secret key. The Cursor and Claude Desktop configs live in your home directory (`~/.cursor/mcp.json`, `~/Library/Application Support/Claude/claude_desktop_config.json`) and are not part of your project repo, so they won't be accidentally committed. Never commit access keys or secret keys to version control.
+
 **Cursor** (`~/.cursor/mcp.json`):
 
 ```json

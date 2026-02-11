@@ -34,22 +34,61 @@ All endpoints are prefixed with `/api/v1/`.
 
 ## Authentication
 
-Meshes supports two authentication methods:
+Meshes supports two authentication methods. Full details at: https://meshes.io/docs/api/authentication
 
 ### Bearer Token (Management API)
 
-For server-side operations — managing workspaces, connections, rules, and reading events.
+For server-side operations — managing workspaces, connections, rules, and reading events. Meshes uses short-lived HS256 JWTs (max 60 second expiry) minted from your machine key credentials (access key + secret key + org ID).
+
+**Preferred: Use the `@mesheshq/api` SDK** which handles token generation automatically:
 
 ```typescript
+import MeshesApiClient from "@mesheshq/api";
+
+const client = new MeshesApiClient(
+  process.env.MESHES_ORG_ID!,
+  process.env.MESHES_ACCESS_KEY!,
+  process.env.MESHES_SECRET_KEY!
+);
+
+const workspaces = await client.get("/workspaces");
+```
+
+If you need to generate tokens manually (e.g., for direct `fetch` calls), use the `jose` library:
+
+```typescript
+import { SignJWT } from "jose";
+
+const accessKey = process.env.MESHES_ACCESS_KEY!;
+const secretKey = process.env.MESHES_SECRET_KEY!;
+const orgId = process.env.MESHES_ORG_ID!;
+
+async function createMeshesToken() {
+  const key = new TextEncoder().encode(secretKey);
+  return new SignJWT({ org: orgId })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT", kid: accessKey })
+    .setIssuer(`urn:meshes:m2m:${accessKey}`)
+    .setAudience("meshes-api")
+    .setIssuedAt()
+    .setExpirationTime("30s")
+    .sign(key);
+}
+
+// Use in requests:
+const token = await createMeshesToken();
 const headers = {
-  "Authorization": "Bearer YOUR_JWT_TOKEN",
+  "Authorization": `Bearer ${token}`,
   "Content-Type": "application/json",
 };
 ```
 
+**Important:** Tokens expire in ≤60 seconds. Generate a fresh token for each request or short batch of requests. Never hardcode or cache tokens long-term.
+
 ### Publishable Key (Event Ingestion)
 
-For emitting events — safe to expose in frontend code. Sent via the `X-Meshes-Publishable-Key` header. Only grants access to `POST /api/v1/events` and `POST /api/v1/events/bulk`.
+For emitting events — safe to expose in frontend code and commit to repos. Sent via the `X-Meshes-Publishable-Key` header. Only grants access to event endpoints — no management API access.
+
+**Use `https://events.meshes.io` for event ingestion** — this endpoint is CORS-friendly and designed for client-side use. The `https://api.meshes.io` base URL is for management APIs only and does not support CORS.
 
 ```typescript
 const headers = {
@@ -59,6 +98,8 @@ const headers = {
 ```
 
 Each workspace has its own publishable key, returned when you `GET /api/v1/workspaces/{workspace_id}`.
+
+See: https://meshes.io/docs/events/send-events
 
 ## Official SDKs
 
@@ -81,7 +122,7 @@ This is the primary integration point. Your app emits events; Meshes handles rou
 
 ### Single Event — `POST /api/v1/events`
 
-Accepts either Bearer token or Publishable Key auth.
+Accepts either Bearer token or Publishable Key auth. Use `https://events.meshes.io` for client-side/CORS-friendly requests, or `https://api.meshes.io` for server-side.
 
 ```typescript
 async function emitEvent(
@@ -89,7 +130,7 @@ async function emitEvent(
   event: string,
   payload: Record<string, unknown>
 ) {
-  const response = await fetch("https://api.meshes.io/api/v1/events", {
+  const response = await fetch("https://events.meshes.io/api/v1/events", {
     method: "POST",
     headers: {
       "X-Meshes-Publishable-Key": process.env.MESHES_PUBLISHABLE_KEY!,
@@ -129,7 +170,7 @@ async function emitBulkEvents(
     resource_id?: string;
   }>
 ) {
-  const response = await fetch("https://api.meshes.io/api/v1/events/bulk", {
+  const response = await fetch("https://events.meshes.io/api/v1/events/bulk", {
     method: "POST",
     headers: {
       "X-Meshes-Publishable-Key": process.env.MESHES_PUBLISHABLE_KEY!,
@@ -401,8 +442,8 @@ async function onTenantEvent(
 ### Form Submission (Frontend with Publishable Key)
 
 ```typescript
-// Safe for client-side — publishable key only allows event emission
-await fetch("https://api.meshes.io/api/v1/events", {
+// Safe for client-side — publishable key is safe to commit to repos
+await fetch("https://events.meshes.io/api/v1/events", {
   method: "POST",
   headers: {
     "X-Meshes-Publishable-Key": "pk_live_...",
@@ -446,6 +487,8 @@ API errors return `{ message: string, error?: any }`.
 - **Don't store destination credentials in your app** — connections in Meshes manage OAuth tokens and API keys.
 - **Don't hardcode workspace UUIDs** — store them per tenant in your database.
 - **Don't use Bearer tokens in frontend code** — use the publishable key (`X-Meshes-Publishable-Key`) for client-side event emission.
+- **Don't commit access keys or secret keys to repos** — use environment variables. Publishable keys are safe to commit.
+- **Don't use `api.meshes.io` from the browser** — use `events.meshes.io` for frontend event emission (CORS-friendly).
 
 ## Integrations Discovery
 
