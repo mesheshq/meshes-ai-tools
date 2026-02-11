@@ -490,12 +490,180 @@ API errors return `{ message: string, error?: any }`.
 - **Don't commit access keys or secret keys to repos** — use environment variables. Publishable keys are safe to commit.
 - **Don't use `api.meshes.io` from the browser** — use `events.meshes.io` for frontend event emission (CORS-friendly).
 
-## Integrations Discovery
+## Integrations: Connections & Rules Pattern
 
-To discover available actions and authentication for each integration type:
+Meshes integrations are self-describing. The `GET /api/v1/integrations` endpoint returns metadata that tells you everything needed to create connections and rules for each integration type. **Always call this endpoint first** when setting up a new integration.
+
+### Step 1: Discover integration metadata
 
 ```
 GET /api/v1/integrations
 ```
 
-Returns integration types with their authentication requirements (oauth, api_key, basic, none), supported actions with field definitions, and display metadata.
+Each integration defines:
+
+- **`authentication`** — how to create a connection (what credentials are needed)
+- **`actions`** — what rules can do (what the `metadata.action` field should be)
+
+### Step 2: Create a connection
+
+The `authentication` object tells you what goes in the connection's `metadata`:
+
+- **`api_key`** type — the `fields` array lists required credentials. Put them in `metadata`.
+- **`oauth`** type — no fields needed in metadata; OAuth flow is handled by the Meshes dashboard.
+- **`none`** type — check `fields` for any config (e.g., webhook URL).
+
+Example — ActiveCampaign (api_key auth):
+
+```typescript
+// Integration metadata says: authentication.type = "api_key"
+// with fields: [{ key: "api_url", ... }, { key: "api_key", ... }]
+await createConnection({
+  workspace: workspaceId,
+  type: "activecampaign",
+  name: "My ActiveCampaign",
+  metadata: {
+    api_url: "https://myaccount.api-us1.com",
+    api_key: "your-activecampaign-api-key",
+  },
+});
+```
+
+Example — HubSpot (oauth auth):
+
+```typescript
+// Integration metadata says: authentication.type = "oauth"
+// OAuth connections are created via the Meshes dashboard UI.
+// The connection will already exist — just reference its ID in rules.
+```
+
+Example — Webhook (no auth):
+
+```typescript
+// Integration metadata says: authentication.type = "none"
+// with fields: [{ key: "url", ... }]
+await createConnection({
+  workspace: workspaceId,
+  type: "webhook",
+  name: "My Webhook",
+  metadata: {
+    url: "https://example.com/webhook",
+  },
+});
+```
+
+### Step 3: Discover available actions for a connection
+
+Each integration has an `actions` object. Each action has:
+
+- **`key`** — the value to use in `metadata.action` when creating a rule
+- **`data`** — lists of selectable items (lists, tags, campaigns, etc.) needed for the rule
+- **`fields`** — which metadata fields the rule requires (e.g., `["id"]` or `["id", "value"]`)
+
+To get the actual selectable items for a specific connection, call:
+
+```
+GET /api/v1/connections/{connection_id}/actions
+```
+
+This returns the **live data** for each action — the actual lists, tags, campaigns, properties, etc. from the connected account.
+
+### Step 4: Create rules with the right metadata
+
+Rules require `metadata.action` plus additional fields from the action's `fields` array, populated with IDs from the action data.
+
+**Simple actions** (most common) — require an `id` from the action data:
+
+```typescript
+// HubSpot add_to_list: action data has "lists" with [{id: "5", name: "Unit Test List"}, ...]
+// Action fields: ["id"]
+await createRule({
+  workspace: workspaceId,
+  connection: hubspotConnectionId,
+  event: "user.signup",
+  metadata: {
+    action: "add_to_list",
+    id: "5", // list ID from action data
+  },
+});
+
+// Intercom add_tag: action data has "tags" with [{id: "123", name: "new-user"}, ...]
+await createRule({
+  workspace: workspaceId,
+  connection: intercomConnectionId,
+  event: "user.signup",
+  metadata: {
+    action: "add_tag",
+    id: "123", // tag ID from action data
+  },
+});
+```
+
+**Advanced actions** — require additional fields like `value`:
+
+```typescript
+// HubSpot update_property: action data has "properties" with options
+// Action fields: ["id", "value"]
+// Property: {id: "lifecycle_stage", options: [{value: "lead"}, {value: "customer"}]}
+await createRule({
+  workspace: workspaceId,
+  connection: hubspotConnectionId,
+  event: "payment.succeeded",
+  metadata: {
+    action: "update_property",
+    id: "lifecycle_stage", // property ID from action data
+    value: "customer", // option value from property options
+  },
+});
+```
+
+**Actions with extra fields** (e.g., Resend send_email_template):
+
+```typescript
+// Resend send_email_template: action data has "templates"
+// Action fields: ["id", "subject", "from"]
+// Also has "field" kind data items for subject and from
+await createRule({
+  workspace: workspaceId,
+  connection: resendConnectionId,
+  event: "user.signup",
+  metadata: {
+    action: "send_email_template",
+    id: "tmpl_abc123", // template ID from action data
+    // Optional overrides (defined as "field" kind in data):
+    // subject: 'Welcome!',
+    // from: 'Team <team@example.com>',
+  },
+});
+```
+
+### Action pattern summary
+
+| Integration    | Action                                     | metadata fields                     | Data source          |
+| -------------- | ------------------------------------------ | ----------------------------------- | -------------------- |
+| ActiveCampaign | `add_to_list` / `remove_from_list`         | `action`, `id`                      | lists                |
+| ActiveCampaign | `add_tag` / `remove_tag`                   | `action`, `id`                      | tags                 |
+| AWeber         | `add_to_list` / `remove_from_list`         | `action`, `id`                      | lists                |
+| HubSpot        | `add_to_list` / `remove_from_list`         | `action`, `id`                      | lists                |
+| HubSpot        | `update_property`                          | `action`, `id`, `value`             | properties + options |
+| Intercom       | `add_tag` / `remove_tag`                   | `action`, `id`                      | tags                 |
+| Mailchimp      | `add_to_list` / `remove_from_list`         | `action`, `id`                      | lists                |
+| MailerLite     | `add_to_group` / `remove_from_group`       | `action`, `id`                      | groups               |
+| Resend         | `add_to_segment` / `remove_from_segment`   | `action`, `id`                      | segments             |
+| Resend         | `send_email_template`                      | `action`, `id`, `subject`?, `from`? | templates            |
+| Salesforce     | `add_to_campaign` / `remove_from_campaign` | `action`, `id`                      | campaigns            |
+| Salesforce     | `update_property`                          | `action`, `id`, `value`             | properties + options |
+| Webhook        | `send_webhook`                             | `action`                            | (none)               |
+| Zoom           | `add_meeting_registrant`                   | `action`, `id`                      | meetings             |
+| Zoom           | `add_webinar_registrant`                   | `action`, `id`                      | webinars             |
+
+### Workflow for AI agents
+
+When asked to set up an integration:
+
+1. `GET /api/v1/integrations` — discover auth requirements and available actions
+2. Check if a connection already exists: `GET /api/v1/workspaces/{id}/connections`
+3. If not, create the connection with the right `metadata` based on `authentication.fields`
+4. `GET /api/v1/connections/{id}/actions` — get live action data (lists, tags, etc.)
+5. Create rules with `metadata.action` + IDs from the action data
+6. Test with `POST /api/v1/events` and verify with `GET /api/v1/events/{id}`
