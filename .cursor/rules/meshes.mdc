@@ -1,0 +1,458 @@
+---
+description: Rules for integrating with the Meshes event routing platform (meshes.io). Use when writing code that emits events, creates integrations, or connects to CRMs/webhooks/email tools via Meshes.
+globs:
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.js"
+  - "**/*.jsx"
+alwaysApply: false
+---
+
+# Meshes Integration Rules
+
+You are helping a developer integrate with **Meshes** (https://meshes.io), a universal event routing and integration platform for SaaS applications. Meshes handles fan-out, retries, and delivery of product events to tools like HubSpot, Intercom, Salesforce, Resend, Mailchimp, Zoom, and custom webhooks.
+
+**API Reference:** https://docs.meshes.dev
+**Documentation:** https://meshes.io/docs
+
+## Core Concepts
+
+Meshes has four core primitives:
+
+- **Workspace**: A tenant-scoped container. Each workspace has its own connections, rules, event logs, and a publishable key. In multi-tenant apps, create one workspace per customer.
+- **Connection**: A configured destination within a workspace (e.g., a HubSpot OAuth connection, a Salesforce API key, a webhook URL). Connections hold per-tenant credentials, metadata, and action configuration.
+- **Rule**: Binds an event type to a connection. Rules specify which connection receives the event and include a `metadata` object with at minimum an `action` field that determines what the destination does (e.g., `create_or_update_contact`). Rules can be filtered by `event`, `resource`, and `resource_id`.
+- **Event**: A JSON payload emitted by your application (e.g., `user.signup`, `payment.failed`, `lead.created`). Events are routed to matching rules within a workspace. Each event tracks delivery status across all matched rules with `rule_events`.
+
+## API Base URL
+
+```
+https://api.meshes.io
+```
+
+All endpoints are prefixed with `/api/v1/`.
+
+## Authentication
+
+Meshes supports two authentication methods:
+
+### Bearer Token (Management API)
+
+For server-side operations — managing workspaces, connections, rules, and reading events.
+
+```typescript
+const headers = {
+  "Authorization": "Bearer YOUR_JWT_TOKEN",
+  "Content-Type": "application/json",
+};
+```
+
+### Publishable Key (Event Ingestion)
+
+For emitting events — safe to expose in frontend code. Sent via the `X-Meshes-Publishable-Key` header. Only grants access to `POST /api/v1/events` and `POST /api/v1/events/bulk`.
+
+```typescript
+const headers = {
+  "X-Meshes-Publishable-Key": "pk_live_...",
+  "Content-Type": "application/json",
+};
+```
+
+Each workspace has its own publishable key, returned when you `GET /api/v1/workspaces/{workspace_id}`.
+
+## Official SDKs
+
+Meshes provides two official Node.js SDKs:
+
+- **`@mesheshq/api`** — Management API SDK (uses access key + secret key)
+- **`@mesheshq/events`** — Events SDK (uses publishable key for emitting events)
+
+See: https://meshes.io/docs/api/sdks
+
+## Supported Integration Types
+
+```
+activecampaign | aweber | hubspot | intercom | mailchimp | mailerlite | resend | salesforce | webhook | zoom
+```
+
+## Emitting Events
+
+This is the primary integration point. Your app emits events; Meshes handles routing and delivery.
+
+### Single Event — `POST /api/v1/events`
+
+Accepts either Bearer token or Publishable Key auth.
+
+```typescript
+async function emitEvent(
+  workspaceId: string,
+  event: string,
+  payload: Record<string, unknown>
+) {
+  const response = await fetch("https://api.meshes.io/api/v1/events", {
+    method: "POST",
+    headers: {
+      "X-Meshes-Publishable-Key": process.env.MESHES_PUBLISHABLE_KEY!,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      workspace: workspaceId, // UUID
+      event, // e.g., "user.signup"
+      payload,
+      // Optional:
+      // resource: "user",
+      // resource_id: "usr_abc123",
+      // type: "event",       // defaults to "event"
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Meshes event failed: ${response.status}`);
+  }
+
+  return response.json();
+  // Returns: { event: { id, event, workspace, created_by, created_at, ... } }
+}
+```
+
+### Bulk Events — `POST /api/v1/events/bulk`
+
+Send up to 100 events in a single request. Returns 201 on full success, 207 on partial success.
+
+```typescript
+async function emitBulkEvents(
+  events: Array<{
+    workspace: string;
+    event: string;
+    payload: Record<string, unknown>;
+    resource?: string;
+    resource_id?: string;
+  }>
+) {
+  const response = await fetch("https://api.meshes.io/api/v1/events/bulk", {
+    method: "POST",
+    headers: {
+      "X-Meshes-Publishable-Key": process.env.MESHES_PUBLISHABLE_KEY!,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(events), // Array of 1-100 event objects
+  });
+
+  return response.json();
+  // Returns: { count, error_count?, records: [...] }
+}
+```
+
+### Event Payload Schema
+
+The `payload` object has these recognized top-level fields (all optional, plus any custom fields via `additionalProperties`):
+
+```typescript
+interface EventPayload {
+  email?: string; // format: email — required for CRM contact matching
+  id?: string; // resource identifier for deduplication
+  ip_address?: string;
+  name?: string;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+  resource_url?: string;
+  [key: string]: unknown; // additional custom fields
+}
+```
+
+**Always include `email`** when the event relates to a person — CRM and email connections rely on it for contact matching.
+
+### Event Naming Convention
+
+Use descriptive event names. Common patterns:
+
+```
+user.signup
+user.updated
+payment.failed
+payment.succeeded
+lead.created
+trial.expiring
+subscription.cancelled
+form.submitted
+```
+
+## Workspaces
+
+### List Workspaces — `GET /api/v1/workspaces`
+
+```typescript
+// Returns: { count, limit, next_cursor, records: [{ id, name, description, created_at, updated_at }] }
+```
+
+### Get Workspace — `GET /api/v1/workspaces/{workspace_id}`
+
+Returns workspace details **including the publishable key**:
+
+```typescript
+// Returns: { id, name, description, created_at, updated_at, publishable_key: { public_key, name } }
+```
+
+### Create Workspace — `POST /api/v1/workspaces`
+
+```typescript
+await fetch("https://api.meshes.io/api/v1/workspaces", {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    name: "Acme Corp", // 3-50 chars, alphanumeric + space/underscore/dash
+    description: "Production workspace for Acme", // optional, max 1024 chars
+  }),
+});
+// Returns: { workspace: { id, name, description, created_at, updated_at } }
+```
+
+### Update Workspace — `PUT /api/v1/workspaces/{workspace_id}`
+
+```typescript
+// Body: { name: string (required), description?: string | null }
+```
+
+### Workspace Sub-Resources
+
+- `GET /api/v1/workspaces/{workspace_id}/connections` — list connections in workspace
+- `GET /api/v1/workspaces/{workspace_id}/rules` — list rules in workspace
+- `GET /api/v1/workspaces/{workspace_id}/events` — list events in workspace (supports `?limit`, `?cursor`, `?event`, `?resource`, `?resource_id`, `?status` filters)
+
+## Connections
+
+Connections are configured destinations within a workspace.
+
+### List Connections — `GET /api/v1/connections`
+
+Returns all connections across the organization.
+
+### Get Connection — `GET /api/v1/connections/{connection_id}`
+
+### Create Connection — `POST /api/v1/connections`
+
+```typescript
+await fetch("https://api.meshes.io/api/v1/connections", {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    workspace: "uuid-here",
+    type: "hubspot", // one of the supported integration types
+    name: "HubSpot Prod", // 1-128 chars, alphanumeric + space/underscore/dash
+    metadata: {
+      /* connector-specific config */
+    },
+    hidden: false, // optional, default false
+  }),
+});
+```
+
+### Update Connection — `PUT /api/v1/connections/{connection_id}`
+
+```typescript
+// Body: { name: string (required), metadata: object (required), hidden?: boolean }
+```
+
+### Delete Connection — `DELETE /api/v1/connections/{connection_id}`
+
+```typescript
+// Optional body: { force_delete?: boolean }
+// Returns 409 if connection has active rules (use force_delete to override)
+```
+
+### Connection Sub-Resources
+
+- `GET /api/v1/connections/{connection_id}/actions` — get available actions for this connection type
+- `GET /api/v1/connections/{connection_id}/fields` — get destination field catalog (supports `?refresh=true`)
+- `GET /api/v1/connections/{connection_id}/mappings/default` — get default field mappings
+- `PUT /api/v1/connections/{connection_id}/mappings/default` — update default field mappings
+
+### Field Mapping Schema
+
+Mappings use a versioned schema with source → destination field transforms:
+
+```typescript
+{
+  schema_version: 1,
+  fields: [
+    {
+      dest: "email",                           // destination field key
+      source: { type: "path", value: "email" }, // from event payload
+      transforms: [{ type: "lower" }, { type: "trim" }],
+      on_error: "skip_field",                   // or "warn_action" | "fail_action"
+    },
+    {
+      dest: "lifecycle_stage",
+      source: { type: "literal", value: "lead" }, // static value
+    },
+  ],
+}
+```
+
+**Source types:**
+
+- `path` — references a field in the event payload (e.g., `"email"`, `"user.email"`)
+- `literal` — a static value (string, number, boolean, or null)
+
+**Available transforms:** `to_string`, `to_number`, `to_boolean`, `to_date`, `to_datetime`, `default`, `trim`, `lower`, `upper`, `substring`
+
+## Rules
+
+Rules bind event types to connections with action configuration.
+
+### List Rules — `GET /api/v1/rules`
+
+Supports query filters: `?event=user.signup&resource=user&resource_id=plan_pro`
+
+### Get Rule — `GET /api/v1/rules/{rule_id}`
+
+### Create Rule — `POST /api/v1/rules`
+
+```typescript
+await fetch("https://api.meshes.io/api/v1/rules", {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    workspace: "workspace-uuid",
+    connection: "connection-uuid",
+    event: "user.signup",
+    metadata: {
+      action: "create_or_update_contact", // required — the action the destination performs
+      // Additional action-specific fields:
+      // id, name, value, key, data, option, option_value
+    },
+    // Optional:
+    // resource: "user",
+    // resource_id: "plan_pro",       // pattern: ^[A-Za-z0-9._:-]{1,64}$
+    // active: true,                  // default true
+    // hidden: false,                 // default false
+  }),
+});
+```
+
+### Delete Rule — `DELETE /api/v1/rules/{rule_id}`
+
+## Events (Reading)
+
+### List Events — `GET /api/v1/events`
+
+Supports `?limit` (1-200, default 50) and `?cursor` for pagination.
+
+### Get Event — `GET /api/v1/events/{event_id}`
+
+Returns event with delivery status and `rule_events` array showing per-rule delivery:
+
+```typescript
+// Each rule_event includes:
+// { id, connection, rule, integration_type, status, attempt_count, last_error, ... }
+// status: "pending" | "processing" | "completed" | "failed"
+```
+
+### Get Event with Payload — `GET /api/v1/events/{event_id}/payload`
+
+Same as above but includes the full event `payload` object.
+
+### Retry Failed Rule — `POST /api/v1/events/{event_id}/rules/{rule_id}/retry`
+
+Manually retry a failed rule delivery.
+
+## Pagination
+
+All list endpoints use cursor-based pagination:
+
+```typescript
+interface PaginatedResponse<T> {
+  count: number;
+  limit: number;
+  next_cursor: string | null; // pass as ?cursor= for next page
+  records: T[];
+}
+```
+
+## Common Integration Patterns
+
+### On User Signup
+
+```typescript
+await emitEvent(workspaceId, "user.signup", {
+  email: user.email,
+  first_name: user.firstName,
+  last_name: user.lastName,
+  id: user.id,
+  plan: "pro",
+  source: "organic",
+});
+```
+
+### Multi-Tenant Pattern
+
+```typescript
+// Each customer gets their own workspace with their own publishable key
+async function onTenantEvent(
+  tenantWorkspaceId: string,
+  event: string,
+  payload: object
+) {
+  await emitEvent(tenantWorkspaceId, event, payload);
+}
+```
+
+### Form Submission (Frontend with Publishable Key)
+
+```typescript
+// Safe for client-side — publishable key only allows event emission
+await fetch("https://api.meshes.io/api/v1/events", {
+  method: "POST",
+  headers: {
+    "X-Meshes-Publishable-Key": "pk_live_...",
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    workspace: "workspace-uuid",
+    event: "form.submitted",
+    payload: { email: formData.email, name: formData.name },
+  }),
+});
+```
+
+## Error Handling
+
+Event emission should not block your core application flow:
+
+```typescript
+try {
+  await emitEvent(workspaceId, "user.signup", payload);
+} catch (error) {
+  console.error("Failed to emit Meshes event:", error);
+}
+```
+
+API errors return `{ message: string, error?: any }`.
+
+**Common status codes:**
+
+- `400` — Invalid request body
+- `401` — Missing or invalid authentication
+- `404` — Resource not found
+- `409` — Conflict (duplicate name, active rules on connection, etc.)
+- `422` — Unprocessable entity (invalid mapping schema)
+- `429` — Rate limited
+
+## What NOT to Do
+
+- **Don't build retry logic for destinations** — Meshes handles retries and dead-letter queues.
+- **Don't fan out events yourself** — emit once, let rules handle fan-out to multiple destinations.
+- **Don't store destination credentials in your app** — connections in Meshes manage OAuth tokens and API keys.
+- **Don't hardcode workspace UUIDs** — store them per tenant in your database.
+- **Don't use Bearer tokens in frontend code** — use the publishable key (`X-Meshes-Publishable-Key`) for client-side event emission.
+
+## Integrations Discovery
+
+To discover available actions and authentication for each integration type:
+
+```
+GET /api/v1/integrations
+```
+
+Returns integration types with their authentication requirements (oauth, api_key, basic, none), supported actions with field definitions, and display metadata.
