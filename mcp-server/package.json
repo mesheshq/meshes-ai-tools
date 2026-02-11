@@ -4,6 +4,7 @@
   "description": "MCP server for the Meshes event routing platform — lets AI agents emit events, manage workspaces, connections, rules, and debug deliveries.",
   "type": "module",
   "main": "dist/index.js",
+  "license": "UNLICENSED",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
