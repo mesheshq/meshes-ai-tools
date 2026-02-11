@@ -78,9 +78,9 @@ Supported integrations: ActiveCampaign, AWeber, HubSpot, Intercom, Mailchimp, Ma
 - [Meshes Docs](https://meshes.io/docs)
 - [API Reference](https://docs.meshes.dev)
 - [Authentication](https://meshes.io/docs/api/authentication)
-- [AI Tools Docs](https://meshes.io/docs/ai)
+- [AI Tools Docs](https://meshes.io/docs/ai/ai)
 
 ## License
 
 These tools are provided for use with the Meshes platform.
-See [meshes.io/terms](https://meshes.io/terms) for terms of use.
+See [meshes.io/terms-of-service](https://meshes.io/terms-of-service) for terms of use.

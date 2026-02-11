@@ -184,4 +184,4 @@ npx @modelcontextprotocol/inspector node dist/index.js
 ## License
 
 These tools are provided for use with the Meshes platform.
-See [meshes.io/terms](https://meshes.io/terms) for terms of use.
+See [meshes.io/terms-of-service](https://meshes.io/terms-of-service) for terms of use.
