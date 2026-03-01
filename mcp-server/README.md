@@ -1,6 +1,10 @@
-# Meshes MCP Server
+# Meshes MCP Server (Fallback Copy)
 
 An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server that lets AI agents interact with the [Meshes](https://meshes.io) event routing platform.
+
+> Official repository: https://github.com/mesheshq/meshes-mcp-server
+>
+> This directory is kept in `meshes-ai-tools` as a fallback copy for compatibility.
 
 ## What is Meshes?
 

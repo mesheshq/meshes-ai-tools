@@ -1,6 +1,6 @@
 # meshes-ai-tools
 
-AI tools for [Meshes](https://meshes.io) — Cursor rules, MCP server, and agent integrations for the Meshes event routing platform.
+AI tools for [Meshes](https://meshes.io) — Cursor rules and agent integrations for the Meshes event routing platform.
 
 ## What's inside
 
@@ -13,15 +13,18 @@ mkdir -p .cursor/rules
 curl -o .cursor/rules/meshes.mdc https://raw.githubusercontent.com/mesheshq/meshes-ai-tools/refs/heads/main/.cursor/rules/meshes.mdc
 ```
 
-### [MCP Server](./mcp-server/)
+### [MCP Server (Official)](https://github.com/mesheshq/meshes-mcp-server)
 
-A [Model Context Protocol](https://modelcontextprotocol.io) server that gives AI agents direct tool access to Meshes — emit events, manage workspaces, create rules, inspect deliveries, and more. Works with Claude Code, Claude Desktop, Cursor, and Windsurf.
+The official [Model Context Protocol](https://modelcontextprotocol.io) server for Meshes lives in the standalone repo above. It gives AI agents direct tool access to Meshes — emit events, manage workspaces, create rules, inspect deliveries, and more. Works with Claude Code, Claude Desktop, Cursor, and Windsurf.
 
 ```bash
-cd mcp-server
+git clone git@github.com:mesheshq/meshes-mcp-server.git
+cd meshes-mcp-server
 npm install
 npm run build
 ```
+
+Fallback copy in this repo: [`./mcp-server/`](./mcp-server/).
 
 ## Quick start
 
@@ -36,14 +39,16 @@ curl -o .cursor/rules/meshes.mdc https://raw.githubusercontent.com/mesheshq/mesh
 
 ### MCP Server
 
-1. Clone and build:
+1. Clone and build the official server:
 
 ```bash
-git clone git@github.com:mesheshq/meshes-ai-tools.git
-cd meshes-ai-tools/mcp-server
+git clone git@github.com:mesheshq/meshes-mcp-server.git
+cd meshes-mcp-server
 npm install
 npm run build
 ```
+
+Fallback copy (kept here for compatibility): [`./mcp-server/`](./mcp-server/).
 
 2. Add to your MCP client (e.g., `~/.cursor/mcp.json`):
 
@@ -54,7 +59,7 @@ npm run build
   "mcpServers": {
     "meshes": {
       "command": "node",
-      "args": ["/path/to/meshes-ai-tools/mcp-server/dist/index.js"],
+      "args": ["/path/to/meshes-mcp-server/dist/index.js"],
       "env": {
         "MESHES_ACCESS_KEY": "your_access_key",
         "MESHES_SECRET_KEY": "your_secret_key",
@@ -79,6 +84,7 @@ Supported integrations: ActiveCampaign, AWeber, HubSpot, Intercom, Mailchimp, Ma
 - [API Reference](https://docs.meshes.dev)
 - [Authentication](https://meshes.io/docs/api/authentication)
 - [AI Tools Docs](https://meshes.io/docs/ai/ai)
+- [Official MCP Server Repo](https://github.com/mesheshq/meshes-mcp-server)
 
 ## License
 
