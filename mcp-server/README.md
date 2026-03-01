@@ -4,7 +4,8 @@ An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server that l
 
 > Official repository: https://github.com/mesheshq/meshes-mcp-server
 >
-> This directory is kept in `meshes-ai-tools` as a fallback copy for compatibility.
+> Recommended usage is the published package (`npx -y @mesheshq/mcp-server`) from the official repo.
+> This directory is kept in `meshes-ai-tools` as a fallback copy for compatibility and local development.
 
 ## What is Meshes?
 
