@@ -10,7 +10,7 @@ alwaysApply: false
 
 # Meshes Integration Rules
 
-You are helping a developer integrate with **Meshes** (https://meshes.io), a universal event routing and integration platform for SaaS applications. Meshes handles fan-out, retries, and delivery of product events to tools like HubSpot, Intercom, Salesforce, Resend, Mailchimp, Zoom, and custom webhooks.
+You are helping a developer integrate with **Meshes** (https://meshes.io), a universal event routing and integration platform for SaaS applications. Meshes handles fan-out, retries, and delivery of product events to tools like HubSpot, Intercom, Salesforce, Slack, Resend, Mailchimp, Zoom, and custom webhooks.
 
 **API Reference:** https://docs.meshes.dev
 **Documentation:** https://meshes.io/docs
@@ -20,7 +20,7 @@ You are helping a developer integrate with **Meshes** (https://meshes.io), a uni
 Meshes has four core primitives:
 
 - **Workspace**: A tenant-scoped container. Each workspace has its own connections, rules, event logs, and a publishable key. In multi-tenant apps, create one workspace per customer.
-- **Connection**: A configured destination within a workspace (e.g., a HubSpot OAuth connection, a Salesforce API key, a webhook URL). Connections hold per-tenant credentials, metadata, and action configuration.
+- **Connection**: A configured destination within a workspace (e.g., a HubSpot OAuth connection, a Slack OAuth connection, a webhook URL). Connections hold per-tenant credentials, metadata, and action configuration.
 - **Rule**: Binds an event type to a connection. Rules specify which connection receives the event and include a `metadata` object with at minimum an `action` field that determines what the destination does (e.g., `add_to_list`). Rules can be filtered by `event`, `resource`, and `resource_id`.
 - **Event**: A JSON payload emitted by your application (e.g., `user.signup`, `payment.failed`, `lead.created`). Events are routed to matching rules within a workspace. Each event tracks delivery status across all matched rules with `rule_events`.
 
@@ -113,7 +113,7 @@ See: https://meshes.io/docs/api/sdks
 ## Supported Integration Types
 
 ```
-activecampaign | aweber | hubspot | intercom | mailchimp | mailerlite | resend | salesforce | webhook | zoom
+activecampaign | aweber | hubspot | intercom | mailchimp | mailerlite | resend | salesforce | slack | webhook | zoom
 ```
 
 ## Emitting Events
@@ -361,7 +361,7 @@ await fetch("https://api.meshes.io/api/v1/rules", {
     metadata: {
       action: "add_to_list", // required — the action the destination performs
       // Additional action-specific fields:
-      // id, name, value, key, data, option, option_value
+      // id, name, value, template, key, data, option, option_value
     },
     // Optional:
     // resource: "user",
@@ -617,7 +617,7 @@ await createRule({
 });
 ```
 
-**Actions with extra fields** (e.g., Resend send_email_template):
+**Actions with extra fields** (e.g., Resend send_email_template, Slack send_message):
 
 ```typescript
 // Resend send_email_template: action data has "templates"
@@ -633,6 +633,23 @@ await createRule({
     // Optional overrides (defined as "field" kind in data):
     // subject: 'Welcome!',
     // from: 'Team <team@example.com>',
+  },
+});
+```
+
+```typescript
+// Slack send_message: action data has "channels"
+// Action fields: ["id", "template"]
+// Template placeholders resolve directly from the event payload root:
+// {{email}}, {{plan}}, {{user.name}}
+await createRule({
+  workspace: workspaceId,
+  connection: slackConnectionId,
+  event: "user.signup",
+  metadata: {
+    action: "send_message",
+    id: "C0123456789", // channel ID from action data
+    template: "New signup: {{email}} (plan: {{plan}})",
   },
 });
 ```
@@ -653,6 +670,7 @@ await createRule({
 | Resend         | `send_email_template`                      | `action`, `id`, `subject`?, `from`? | templates            |
 | Salesforce     | `add_to_campaign` / `remove_from_campaign` | `action`, `id`                      | campaigns            |
 | Salesforce     | `update_property`                          | `action`, `id`, `value`             | properties + options |
+| Slack          | `send_message`                             | `action`, `id`, `template`          | channels             |
 | Webhook        | `send_webhook`                             | `action`                            | (none)               |
 | Zoom           | `add_meeting_registrant`                   | `action`, `id`                      | meetings             |
 | Zoom           | `add_webinar_registrant`                   | `action`, `id`                      | webinars             |
