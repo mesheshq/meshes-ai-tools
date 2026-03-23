@@ -1,5 +1,5 @@
 ---
-description: Rules for integrating with the Meshes event routing platform (meshes.io). Use when writing code that emits events, creates integrations, or connects to CRMs/webhooks/email tools via Meshes.
+description: Rules for integrating with the public Meshes API, SDKs, and embed product (meshes.io).
 globs:
   - "**/*.ts"
   - "**/*.tsx"
@@ -10,7 +10,9 @@ alwaysApply: false
 
 # Meshes Integration Rules
 
-You are helping a developer integrate with **Meshes** (https://meshes.io), a universal event routing and integration platform for SaaS applications. Meshes handles fan-out, retries, and delivery of product events to tools like HubSpot, Intercom, Salesforce, Slack, Resend, Mailchimp, Zoom, and custom webhooks.
+You are helping a developer integrate with **Meshes** (https://meshes.io), a universal event routing and integration platform for SaaS applications. Meshes handles fan-out, retries, and delivery of product events to tools like HubSpot, Intercom, Salesforce, Slack, Resend, Mailchimp, Zoom, and custom webhooks. Meshes also supports an embedded workspace product that surfaces selected workspace pages inside a host application by using embed sessions, launch URLs, and iframe messaging.
+
+Only rely on documented public endpoints, fields, SDKs, and embed behavior. Do not assume private routes, internal services, internal storage details, or undocumented implementation behavior.
 
 **API Reference:** https://docs.meshes.dev
 **Documentation:** https://meshes.io/docs
@@ -101,12 +103,140 @@ Each workspace has its own publishable key, returned when you `GET /api/v1/works
 
 See: https://meshes.io/docs/events/send-events
 
+## Embedded Workspace and Session Layer
+
+Meshes also supports embedding selected workspace pages inside a host application.
+
+### Supported Launch Pages
+
+- `launch_page` supports `dashboard`, `connections`, `rules`, and `events`
+- Additional in-app pages available after launch include `event detail` and `connection mappings`
+
+`members` and `settings` remain web-only.
+
+### Session Endpoints
+
+Use management credentials on the backend for all of these:
+
+- `POST /api/v1/sessions`
+- `POST /api/v1/sessions/{session_id}/refresh`
+- `GET /api/v1/sessions`
+- `DELETE /api/v1/sessions/{session_id}`
+
+### Required host architecture
+
+- Mint embed sessions on the backend only.
+- Do not call privileged Meshes management endpoints directly from browser code.
+- Use the returned `launch_url` as the iframe `src`.
+- Wait for the iframe to send `meshes:ready`.
+- Then send the runtime token with `meshes:auth`.
+
+The launch URL is bootstrap-only. It is not the runtime credential. A hard iframe reload should use a fresh `launch_url`.
+
+### Minting Fields
+
+`POST /api/v1/sessions` supports:
+
+- `workspace_id`
+- `role`
+- `session_type`
+- `external_user_id`
+- `ttl_seconds`
+- `launch_ttl_seconds`
+- `launch_page`
+- `resource`
+- `resource_id`
+- `allowed_origins`
+- `scopes`
+
+`launch_page` sets the initial top-level page for the embed.
+
+### Session Types
+
+- `workspace`: Full embedded workspace behavior. Can launch on `dashboard`, `connections`, `rules`, or `events`.
+- `resource`: Locks the session to one `resource` + `resource_id` pair. Requires both fields at mint time. Can launch on `dashboard`, `rules`, or `events`, but not `connections`.
+- `dashboard`: Dashboard-only, read-only session. Must launch on `dashboard`.
+
+### Resource session behavior
+
+- Resource sessions keep the embedded experience scoped to the defined `resource` + `resource_id` pair.
+- Use `resource` for the Meshes resource key.
+- Use `resource_id` for your application’s identifier for that resource.
+
+### Dashboard session behavior
+
+- Dashboard sessions are read-only and limited to dashboard views.
+
+### Session Roles And Scopes
+
+Available embed session roles:
+
+- `member`
+- `admin`
+- `owner`
+
+Important behavior notes:
+
+- Use the lowest role that still supports the embedded workflow you need.
+- Sensitive reads can require explicit scopes in addition to role.
+- Sensitive payload reads use the `events.payload:read` scope.
+
+### Origin model
+
+- `allowed_origins` is optional.
+- If provided, it narrows iframe bootstrap and runtime origin checks to that list.
+- If you want tenant-specific embed restrictions, always send explicit `allowed_origins`.
+
+### Iframe Message Contract
+
+Parent -> iframe:
+
+- `meshes:auth`
+
+Iframe -> parent:
+
+- `meshes:ready`
+- `meshes:token-refresh`
+- `meshes:token-expired`
+- `meshes:navigate`
+- `meshes:resize`
+
+### Refresh behavior
+
+- The logical session stays identified by one `session_id`.
+- The iframe asks for refresh before expiry and after auth-related `401` responses.
+- Hosts can auto-refresh or manually refresh and then send the new token with `meshes:auth`.
+
+### OAuth Note For Connection Setup
+
+OAuth-backed connection setup may use Meshes-hosted authorization and callback flows. Design the host experience to allow the documented OAuth flow rather than assuming everything stays inside the iframe.
+
+### Iframe sizing
+
+- The iframe can emit `meshes:resize` with its current content height.
+- The host app or SDK owns the actual iframe height policy.
+- It is valid to apply a minimum height on the host side.
+
+### Primary docs
+
+- https://meshes.io/docs/embed/embed
+- https://meshes.io/docs/embed/quickstart
+- https://meshes.io/docs/embed/session-api
+- https://meshes.io/docs/embed/launch-bootstrap
+- https://meshes.io/docs/embed/postmessage-contract
+- https://meshes.io/docs/embed/workspace-pages
+- https://meshes.io/docs/embed/session-refresh
+- https://meshes.io/docs/embed/oauth-connections
+- https://meshes.io/docs/embed/iframe-sizing
+- https://meshes.io/docs/embed/security
+
 ## Official SDKs
 
-Meshes provides two official Node.js SDKs:
+Meshes provides official SDKs for Node.js/TypeScript and Go:
 
 - **`@mesheshq/api`** — Management API SDK (uses access key + secret key)
 - **`@mesheshq/events`** — Events SDK (uses publishable key for emitting events)
+- **`github.com/mesheshq/go-meshes`** — Go SDK
 
 See: https://meshes.io/docs/api/sdks
 
@@ -344,7 +474,7 @@ Rules bind event types to connections with action configuration.
 
 ### List Rules — `GET /api/v1/rules`
 
-Supports query filters: `?event=user.signup&resource=user&resource_id=plan_pro`
+Supports query filters such as `?event=user.signup&resource=user`
 
 ### Get Rule — `GET /api/v1/rules/{rule_id}`
 
@@ -482,7 +612,7 @@ API errors return `{ message: string, error?: any }`.
 
 ## What NOT to Do
 
-- **Don't build retry logic for destinations** — Meshes handles retries and dead-letter queues.
+- **Don't build retry logic for destinations** — Meshes handles delivery retries and failure handling.
 - **Don't fan out events yourself** — emit once, let rules handle fan-out to multiple destinations.
 - **Don't store destination credentials in your app** — connections in Meshes manage OAuth tokens and API keys.
 - **Don't hardcode workspace UUIDs** — store them per tenant in your database.
@@ -518,7 +648,7 @@ Example — ActiveCampaign (api_key auth):
 ```typescript
 // Integration metadata says: authentication.type = "api_key"
 // with fields: [{ key: "api_url", ... }, { key: "api_key", ... }]
-await createConnection({
+const createConnectionBody = {
   workspace: workspaceId,
   type: "activecampaign",
   name: "My ActiveCampaign",
@@ -526,7 +656,7 @@ await createConnection({
     api_url: "https://myaccount.api-us1.com",
     api_key: "your-activecampaign-api-key",
   },
-});
+};
 ```
 
 Example — HubSpot (oauth auth):
@@ -542,14 +672,14 @@ Example — Webhook (no auth):
 ```typescript
 // Integration metadata says: authentication.type = "none"
 // with fields: [{ key: "url", ... }]
-await createConnection({
+const createConnectionBody = {
   workspace: workspaceId,
   type: "webhook",
   name: "My Webhook",
   metadata: {
     url: "https://example.com/webhook",
   },
-});
+};
 ```
 
 ### Step 3: Discover available actions for a connection
@@ -577,7 +707,7 @@ Rules require `metadata.action` plus additional fields from the action's `fields
 ```typescript
 // HubSpot add_to_list: action data has "lists" with [{id: "5", name: "Unit Test List"}, ...]
 // Action fields: ["id"]
-await createRule({
+const hubspotRuleBody = {
   workspace: workspaceId,
   connection: hubspotConnectionId,
   event: "user.signup",
@@ -585,10 +715,10 @@ await createRule({
     action: "add_to_list",
     id: "5", // list ID from action data
   },
-});
+};
 
 // Intercom add_tag: action data has "tags" with [{id: "123", name: "new-user"}, ...]
-await createRule({
+const intercomRuleBody = {
   workspace: workspaceId,
   connection: intercomConnectionId,
   event: "user.signup",
@@ -596,7 +726,7 @@ await createRule({
     action: "add_tag",
     id: "123", // tag ID from action data
   },
-});
+};
 ```
 
 **Advanced actions** — require additional fields like `value`:
@@ -605,7 +735,7 @@ await createRule({
 // HubSpot update_property: action data has "properties" with options
 // Action fields: ["id", "value"]
 // Property: {id: "lifecycle_stage", options: [{value: "lead"}, {value: "customer"}]}
-await createRule({
+const hubspotUpdatePropertyRuleBody = {
   workspace: workspaceId,
   connection: hubspotConnectionId,
   event: "payment.succeeded",
@@ -614,7 +744,7 @@ await createRule({
     id: "lifecycle_stage", // property ID from action data
     value: "customer", // option value from property options
   },
-});
+};
 ```
 
 **Actions with extra fields** (e.g., Resend send_email_template, Slack send_message):
@@ -623,7 +753,7 @@ await createRule({
 // Resend send_email_template: action data has "templates"
 // Action fields: ["id", "subject", "from"]
 // Also has "field" kind data items for subject and from
-await createRule({
+const resendRuleBody = {
   workspace: workspaceId,
   connection: resendConnectionId,
   event: "user.signup",
@@ -634,7 +764,7 @@ await createRule({
     // subject: 'Welcome!',
     // from: 'Team <team@example.com>',
   },
-});
+};
 ```
 
 ```typescript
@@ -642,7 +772,7 @@ await createRule({
 // Action fields: ["id", "template"]
 // Template placeholders resolve directly from the event payload root:
 // {{email}}, {{plan}}, {{user.name}}
-await createRule({
+const slackRuleBody = {
   workspace: workspaceId,
   connection: slackConnectionId,
   event: "user.signup",
@@ -651,7 +781,7 @@ await createRule({
     id: "C0123456789", // channel ID from action data
     template: "New signup: {{email}} (plan: {{plan}})",
   },
-});
+};
 ```
 
 ### Action pattern summary
