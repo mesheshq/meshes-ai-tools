@@ -25,8 +25,6 @@ claude mcp add meshes \
   -- npx -y @mesheshq/mcp-server
 ```
 
-Fallback copy in this repo: [`./mcp-server/`](./mcp-server/).
-
 ## Quick start
 
 ### Cursor Rules
@@ -38,61 +36,11 @@ mkdir -p .cursor/rules
 curl -o .cursor/rules/meshes.mdc https://raw.githubusercontent.com/mesheshq/meshes-ai-tools/refs/heads/main/.cursor/rules/meshes.mdc
 ```
 
-### MCP Server
-
-1. Add the official server to your MCP client (e.g., `~/.cursor/mcp.json`):
-
-> **Security note:** This config file contains your secret key. It lives in your home directory (`~/.cursor/mcp.json`), not your project repo, so it won't be accidentally committed. Never commit access keys or secret keys to version control. Publishable keys are safe to commit.
-
-```json
-{
-  "mcpServers": {
-    "meshes": {
-      "command": "npx",
-      "args": ["-y", "@mesheshq/mcp-server"],
-      "env": {
-        "MESHES_ACCESS_KEY": "your_access_key",
-        "MESHES_SECRET_KEY": "your_secret_key",
-        "MESHES_ORG_ID": "your_organization_uuid"
-      }
-    }
-  }
-}
-```
-
-2. Optional fallback: run from this repo copy (`./mcp-server/`) instead of npm package:
-
-```bash
-cd mcp-server
-npm install
-npm run build
-```
-
-Then set your MCP server config to:
-
-```json
-{
-  "mcpServers": {
-    "meshes": {
-      "command": "node",
-      "args": ["/path/to/meshes-ai-tools/mcp-server/dist/index.js"],
-      "env": {
-        "MESHES_ACCESS_KEY": "your_access_key",
-        "MESHES_SECRET_KEY": "your_secret_key",
-        "MESHES_ORG_ID": "your_organization_uuid"
-      }
-    }
-  }
-}
-```
-
-Find your credentials in the Meshes dashboard under Settings > Machine Keys.
-
 ## What is Meshes?
 
 [Meshes](https://meshes.io) is a universal integration layer for SaaS applications. Emit product events once — signups, payments, form submissions — and Meshes routes them to CRMs, email tools, webhooks, and more with retries, fan-out, field mappings, and multi-tenant isolation built in.
 
-Supported integrations: ActiveCampaign, AWeber, HubSpot, Intercom, Mailchimp, MailerLite, Resend, Salesforce, Webhooks, Zoom.
+Supported integrations: HubSpot, Salesforce, Intercom, Pipedrive, ActiveCampaign, AWeber, Customer.io, Mailchimp, MailerLite, Resend, SendGrid, Slack, Discord, Zoom, and custom webhooks.
 
 ## Documentation
 
